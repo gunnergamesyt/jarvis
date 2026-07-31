@@ -1,0 +1,8 @@
+SpeechRecognition
+ollama
+edge-tts
+pygame
+requests
+beautifulsoup4
+cloudscraper
+pywin32
