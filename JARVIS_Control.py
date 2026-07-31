@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -940,7 +940,7 @@ root.title("JARVIS")
 root.geometry(f"{cfg['window']['width']}x{cfg['window']['height']}")
 root.configure(bg=cfg['theme']['bg'])
 
-title_label = tk.Label(root, text="JARVIS", fg=cfg['theme']['accent'], bg=cfg['theme']['bg'],
+title_label = tk.Label(root, text=f"JARVIS  v{VERSION}", fg=cfg['theme']['accent'], bg=cfg['theme']['bg'],
                        font=("Segoe UI", 18, "bold"))
 title_label.pack(pady=(8,0))
 
