@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -98,7 +98,9 @@ corrections = {
     "modern": "modrinth", "moderation": "modrinth", "moderate": "modrinth",
     "modreth": "modrinth", "modrith": "modrinth", "modrath": "modrinth",
     "curseforge": "curseforge", "course forge": "curseforge", "curse forge": "curseforge",
-    "modrinth": "modrinth",
+    "cursforge": "curseforge", "kurs forge": "curseforge", "cors forge": "curseforge",
+    "curseforce": "curseforge", "curseforce app": "curseforge", "curse forge app": "curseforge",
+    "modrinth": "modrinth", "modranth": "modrinth", "modrith app": "modrinth",
 }
 
 # ── Apps ──
@@ -117,10 +119,15 @@ APPS = {
 }
 
 def run_cmd(cmd):
-    if cmd.startswith("start "):
-        subprocess.run(cmd, shell=True)
-    else:
-        subprocess.Popen(cmd, shell=True)
+    try:
+        if cmd.startswith("start "):
+            subprocess.run(cmd, shell=True)
+        elif "\\" in cmd:
+            os.startfile(os.path.expandvars(cmd))
+        else:
+            subprocess.Popen(cmd, shell=True)
+    except Exception:
+        pass
 
 # ── Auto-discover folders & files ──
 FOLDERS = {
@@ -230,7 +237,7 @@ def launch_app(name):
         return True
     # Direct match in discovered apps
     if name in INSTALLED:
-        subprocess.Popen(INSTALLED[name], shell=True)
+        run_cmd(INSTALLED[name])
         return True
     # Fuzzy match against known + discovered apps
     known = list(APPS.keys()) + list(INSTALLED.keys())
@@ -240,7 +247,7 @@ def launch_app(name):
         if match in APPS:
             run_cmd(APPS[match])
         else:
-            subprocess.Popen(INSTALLED[match], shell=True)
+            run_cmd(INSTALLED[match])
         return True
     # Try common locations
     path = find_app(name)
@@ -542,10 +549,10 @@ def execute(q):
         else:
             speak(f"No modpacks found, sir.")
 
-    # Open known folders
+    # Open known folders / files / apps
     elif q.startswith("open ") or q.startswith("go to ") or q.startswith("show me "):
         target = q.split(" ", 2)[2].strip() if q.startswith("show me ") else q.split(" ", 1)[1].strip()
-        target = target.replace("folder", "").replace("the", "").strip()
+        target = target.replace("folder", "").replace("the", "").replace("app", "").strip()
         if target in FOLDERS and os.path.exists(FOLDERS[target]):
             os.startfile(FOLDERS[target])
             speak(f"Opening {target} folder, sir.")
@@ -556,9 +563,20 @@ def execute(q):
             os.startfile(os.path.dirname(m))
             speak(f"Found {os.path.basename(m)}, sir.")
             return
+        # Launch an app (fuzzy matching handles misheard names like "curse forge")
+        if launch_app(target):
+            speak(f"Launching {target}, sir.")
+            return
+        # Last resort: treat as a website
+        site = target.replace("website", "").replace("site", "").strip()
+        if site and " " not in site:
+            speak(f"Opening {target} as a website, sir.")
+            webbrowser.open(f"https://{site}.com")
+            return
+        speak(f"Sorry sir, I couldn't find {target}.")
 
     # Launch apps
-    elif q.startswith("open ") or q.startswith("launch ") or q.startswith("run "):
+    elif q.startswith("launch ") or q.startswith("run "):
         app = q.split(" ", 1)[1].strip()
         if launch_app(app):
             speak(f"Launching {app}, sir.")
