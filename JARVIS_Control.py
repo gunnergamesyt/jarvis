@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.2"
+VERSION = "1.5.3"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -267,6 +267,72 @@ def launch_app(name):
         run_cmd(f"start {name}:")
         return True
     except:
+        pass
+    return False
+
+# ── Close Apps ──
+def lnk_target(path):
+    """Resolve a .lnk shortcut to its target path using pywin32 if available"""
+    try:
+        from win32com.client import Dispatch
+        shell = Dispatch("WScript.Shell")
+        return shell.CreateShortcut(path).TargetPath
+    except Exception:
+        return None
+
+def close_app(app):
+    """Close an app by name (handles spaces, fuzzy names, discovered apps)"""
+    app = app.lower().strip()
+    exe = None
+    # Resolve process name from known apps
+    if app in APPS:
+        cmd = APPS[app]
+        if cmd.startswith("start "):
+            exe = app.replace(" ", "") + ".exe"
+        else:
+            base = os.path.basename(os.path.expandvars(cmd))
+            exe = base if base.lower().endswith(".exe") else base + ".exe"
+    # Resolve from discovered shortcuts (get the real exe name)
+    elif app in INSTALLED:
+        tgt = lnk_target(INSTALLED[app])
+        if tgt and tgt.lower().endswith(".exe"):
+            exe = os.path.basename(tgt)
+        else:
+            exe = app.replace(" ", "") + ".exe"
+    else:
+        # Fuzzy match against known + discovered apps
+        known = list(APPS.keys()) + list(INSTALLED.keys())
+        m = difflib.get_close_matches(app, known, n=1, cutoff=0.5)
+        if m:
+            return close_app(m[0])
+        exe = app.replace(" ", "") + ".exe"
+    # Try to kill by exact exe name
+    if exe:
+        r = subprocess.run(f'taskkill /im "{exe}" /f', shell=True, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True
+    # Fallback: fuzzy match against running processes
+    try:
+        out = subprocess.run('tasklist /FO CSV /NH', shell=True, capture_output=True, text=True).stdout
+        best, best_score = None, 0.0
+        app_clean = app.replace(" ", "").lower()
+        for line in out.splitlines():
+            parts = line.split('","')
+            if not parts:
+                continue
+            pname = parts[0].strip('"')
+            if not pname.lower().endswith(".exe"):
+                continue
+            pclean = pname.lower().replace(".exe", "").replace(" ", "")
+            score = difflib.SequenceMatcher(None, app_clean, pclean).ratio()
+            if score > best_score:
+                best_score = score
+                best = pname
+        if best and best_score >= 0.6:
+            r2 = subprocess.run(f'taskkill /im "{best}" /f', shell=True, capture_output=True, text=True)
+            if r2.returncode == 0:
+                return True
+    except Exception:
         pass
     return False
 
@@ -590,29 +656,10 @@ def execute(q):
         # Don't let it kill JARVIS itself
         if app in ("jarvis", "javis", "open code", "opencode"):
             speak("I cannot close myself, sir.")
+        elif close_app(app):
+            speak(f"Closed {app}, sir.")
         else:
-            proc_name = app
-            if " " in proc_name:
-                proc_name = proc_name.replace(" ", "")
-            exe = proc_name + ".exe"
-            result = subprocess.run(f"taskkill /im {exe} /f", shell=True, capture_output=True, text=True)
-            if result.returncode == 0:
-                speak(f"Closed {app}, sir.")
-            else:
-                # Try fuzzy match against known apps
-                m = difflib.get_close_matches(app, list(APPS.keys()), n=1, cutoff=0.5)
-                if m:
-                    cmd = APPS[m[0]]
-                    proc_name = os.path.splitext(os.path.basename(cmd))[0]
-                    if "start " in cmd:
-                        proc_name = app.replace(" ", "")
-                    result2 = subprocess.run(f"taskkill /im {proc_name}.exe /f", shell=True, capture_output=True, text=True)
-                    if result2.returncode == 0:
-                        speak(f"Closed {app}, sir.")
-                    else:
-                        speak(f"Could not find {app} running, sir.")
-                else:
-                    speak(f"Could not find {app} running, sir.")
+            speak(f"Could not find {app} running, sir.")
 
     # File operations
     elif q.startswith("copy ") and " to " in q:
