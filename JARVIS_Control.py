@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.7"
+VERSION = "1.5.8"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -73,6 +73,7 @@ DEFAULT_CONFIG = {
         "mic_index": -1, "tts_rate": 180,
         "tts_voice": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0"
     },
+    "animation": {"file": "off"},
     "minecraft": {
         "mods_folder": os.path.expandvars(r"%APPDATA%\.minecraft\mods"),
         "modpacks_folder": os.path.join(os.path.dirname(os.path.abspath(__file__)), "modpacks")
@@ -256,6 +257,7 @@ def find_app(name):
 
 def launch_app(name):
     name = name.lower().strip()
+    play_opening_animation()
     # Direct match in known apps
     if name in APPS:
         run_cmd(APPS[name])
@@ -294,6 +296,120 @@ def launch_app(name):
     except:
         pass
     return False
+
+# ── Opening Animation (plays when an app is launched through JARVIS) ──
+ANIM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "animations")
+
+def get_animations():
+    """List custom animations (mp4 base names in the animations folder)"""
+    try:
+        if not os.path.isdir(ANIM_DIR):
+            return []
+        return sorted(os.path.splitext(f)[0] for f in os.listdir(ANIM_DIR)
+                      if f.lower().endswith(".mp4"))
+    except Exception:
+        return []
+
+def ensure_default_animation():
+    """Generate the built-in boot animation (mp4) + audio (mp3) on first run"""
+    try:
+        if not os.path.isdir(ANIM_DIR):
+            os.makedirs(ANIM_DIR, exist_ok=True)
+        mp4 = os.path.join(ANIM_DIR, "default.mp4")
+        if os.path.exists(mp4):
+            return mp4
+        import cv2
+        import numpy as np
+        W, H, FPS, DUR = 1280, 720, 30, 3.0
+        out = cv2.VideoWriter(mp4, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
+        total = int(FPS * DUR)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        for i in range(total):
+            t = i / total
+            frame = np.zeros((H, W, 3), dtype=np.uint8)
+            cv2.putText(frame, "JARVIS", (W//2 - 175, H//2 - 40), font, 2.6, (0, 255, 136), 7, cv2.LINE_AA)
+            cv2.putText(frame, "Systems online", (W//2 - 140, H//2 + 35), font, 1.0, (200, 200, 200), 2, cv2.LINE_AA)
+            bx, by, bw, bh = W//2 - 250, H//2 + 80, 500, 12
+            cv2.rectangle(frame, (bx, by), (bx + int(bw * t), by + bh), (0, 255, 136), -1)
+            cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (255, 255, 255), 1)
+            out.write(frame)
+        out.release()
+        try:
+            mp3 = os.path.join(ANIM_DIR, "default.mp3")
+            if not os.path.exists(mp3):
+                asyncio.run(edge_tts.Communicate("Systems online, sir.", "en-GB-RyanNeural").save(mp3))
+        except Exception:
+            pass
+        return mp4
+    except Exception:
+        return None
+
+def play_opening_animation():
+    """Play the configured mp4 (+ paired mp3) fullscreen before opening an app"""
+    try:
+        anim = cfg.get('animation', {}).get('file', 'off')
+        if anim == 'off' or not anim:
+            return
+        mp4 = os.path.join(ANIM_DIR, anim + ".mp4")
+        if not os.path.exists(mp4):
+            return
+        import cv2
+        import numpy as np
+        import pygame
+        cap = cv2.VideoCapture(mp4)
+        if not cap.isOpened():
+            return
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        frames = []
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frames.append(frame)
+        cap.release()
+        if not frames:
+            return
+        pygame.init()
+        info = pygame.display.Info()
+        sw, sh = info.current_w, info.current_h
+        screen = pygame.display.set_mode((sw, sh), pygame.NOFRAME)
+        pygame.display.set_caption("JARVIS")
+        mp3 = os.path.join(ANIM_DIR, anim + ".mp3")
+        has_audio = False
+        if os.path.exists(mp3):
+            try:
+                pygame.mixer.init()
+                pygame.mixer.music.load(mp3)
+                pygame.mixer.music.play()
+                has_audio = True
+            except Exception:
+                pass
+        surf_frames = []
+        for frame in frames:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgb = np.swapaxes(rgb, 0, 1)
+            sf = pygame.surfarray.make_surface(rgb)
+            surf_frames.append(pygame.transform.scale(sf, (sw, sh)))
+        clock = pygame.time.Clock()
+        playing, idx = True, 0
+        while playing:
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
+                    playing = False
+            if idx >= len(surf_frames):
+                break
+            screen.blit(surf_frames[idx], (0, 0))
+            pygame.display.flip()
+            idx += 1
+            clock.tick(fps)
+        if has_audio:
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
+        pygame.quit()
+    except Exception:
+        pass
 
 # ── Close Apps ──
 def lnk_target(path):
@@ -1043,6 +1159,15 @@ def open_settings():
     mm.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
     mm.bind("<<ComboboxSelected>>", lambda e: cfg['audio'].__setitem__('mic_index', options.index(mv.get()) - 1))
 
+    lbl("Opening animation")
+    anims = ["Off"] + get_animations()
+    cur = cfg.get('animation', {}).get('file', 'off')
+    av = tk.StringVar(value="Off" if cur == 'off' or not cur else cur)
+    am = ttk.Combobox(host, textvariable=av, values=anims, font=f, state="readonly")
+    am.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
+    am.bind("<<ComboboxSelected>>", lambda e: cfg['animation'].__setitem__('file', 'off' if av.get() == 'Off' else av.get()))
+    tk.Button(host, text="Folder", command=lambda: (ensure_default_animation(), os.startfile(ANIM_DIR)), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+
     lbl("TTS Rate")
     rv = tk.IntVar(value=cfg['audio']['tts_rate'])
     tk.Spinbox(host, from_=100, to=400, textvariable=rv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
@@ -1171,6 +1296,7 @@ def run_update_check():
         add_log("sys", "JARVIS is up to date.")
 
 root.after(100, process)
-root.after(1500, run_update_check)
-root.after(3000, verify_deps)
+root.after(1500, lambda: threading.Thread(target=run_update_check, daemon=True).start())
+root.after(3000, lambda: threading.Thread(target=verify_deps, daemon=True).start())
+root.after(4000, lambda: threading.Thread(target=ensure_default_animation, daemon=True).start())
 root.mainloop()

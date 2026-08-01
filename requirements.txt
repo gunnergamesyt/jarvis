@@ -8,3 +8,5 @@ requests
 beautifulsoup4
 cloudscraper
 pywin32
+opencv-python-headless
+numpy
