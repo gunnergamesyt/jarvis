@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.6"
+VERSION = "1.5.7"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -973,16 +973,32 @@ def open_settings():
     sw = tk.Toplevel(root)
     sw.title("Settings")
     sw.configure(bg="#2a2a2a")
-    sw.resizable(False, False)
+    sw.geometry("560x460")
+    sw.resizable(True, True)
     f = ("Segoe UI", 10)
     row = [0]
 
+    # Scrollable area so no settings ever get cut off
+    canvas = tk.Canvas(sw, bg="#2a2a2a", highlightthickness=0)
+    vsb = ttk.Scrollbar(sw, orient="vertical", command=canvas.yview)
+    host = tk.Frame(canvas, bg="#2a2a2a")
+    host.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.create_window((0, 0), window=host, anchor="nw")
+    canvas.configure(yscrollcommand=vsb.set)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def on_wheel(e):
+        canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+    canvas.bind("<MouseWheel>", on_wheel)
+    host.bind("<MouseWheel>", on_wheel)
+
     def lbl(text):
-        tk.Label(sw, text=text, fg="#ccc", bg="#2a2a2a", font=f).grid(row=row[0], column=0, sticky="w", padx=10, pady=4)
+        tk.Label(host, text=text, fg="#ccc", bg="#2a2a2a", font=f).grid(row=row[0], column=0, sticky="w", padx=10, pady=4)
         row[0] += 1
 
     def btn(text, cmd):
-        b = tk.Button(sw, text=text, command=cmd, bg="#3a3a3a", fg="white", font=f)
+        b = tk.Button(host, text=text, command=cmd, bg="#3a3a3a", fg="white", font=f)
         b.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
 
     lbl("Background color")
@@ -999,51 +1015,51 @@ def open_settings():
 
     lbl("Font")
     font_var = tk.StringVar(value=cfg['theme']['font_family'])
-    fm = ttk.Combobox(sw, textvariable=font_var, values=sorted(set(tkfont.families())), font=f, state="readonly")
+    fm = ttk.Combobox(host, textvariable=font_var, values=sorted(set(tkfont.families())), font=f, state="readonly")
     fm.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
     fm.bind("<<ComboboxSelected>>", lambda e: (cfg['theme'].__setitem__('font_family', font_var.get()), apply_theme()))
 
     lbl("Font size")
     sv = tk.IntVar(value=cfg['theme']['font_size'])
-    tk.Spinbox(sw, from_=8, to=24, textvariable=sv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
-    tk.Button(sw, text="Apply", command=lambda: (cfg['theme'].__setitem__('font_size', sv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Spinbox(host, from_=8, to=24, textvariable=sv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
+    tk.Button(host, text="Apply", command=lambda: (cfg['theme'].__setitem__('font_size', sv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Window width")
     wv = tk.IntVar(value=cfg['window']['width'])
-    tk.Spinbox(sw, from_=300, to=1200, textvariable=wv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
-    tk.Button(sw, text="Apply", command=lambda: (cfg['window'].__setitem__('width', wv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Spinbox(host, from_=300, to=1200, textvariable=wv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
+    tk.Button(host, text="Apply", command=lambda: (cfg['window'].__setitem__('width', wv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Window height")
     hv = tk.IntVar(value=cfg['window']['height'])
-    tk.Spinbox(sw, from_=200, to=1000, textvariable=hv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
-    tk.Button(sw, text="Apply", command=lambda: (cfg['window'].__setitem__('height', hv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Spinbox(host, from_=200, to=1000, textvariable=hv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
+    tk.Button(host, text="Apply", command=lambda: (cfg['window'].__setitem__('height', hv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Microphone")
     mics = [m for m in get_mic_names() if m != "Default (auto)"]
     options = ["Default (auto)"] + mics
     idx = cfg['audio']['mic_index']
     mv = tk.StringVar(value="Default (auto)" if idx < 0 else (mics[idx] if idx < len(mics) else mics[0]))
-    mm = ttk.Combobox(sw, textvariable=mv, values=options, font=f, state="readonly")
+    mm = ttk.Combobox(host, textvariable=mv, values=options, font=f, state="readonly")
     mm.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
     mm.bind("<<ComboboxSelected>>", lambda e: cfg['audio'].__setitem__('mic_index', options.index(mv.get()) - 1))
 
     lbl("TTS Rate")
     rv = tk.IntVar(value=cfg['audio']['tts_rate'])
-    tk.Spinbox(sw, from_=100, to=400, textvariable=rv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
-    tk.Button(sw, text="Apply", command=lambda: cfg['audio'].__setitem__('tts_rate', rv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Spinbox(host, from_=100, to=400, textvariable=rv, width=5, font=f).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="w")
+    tk.Button(host, text="Apply", command=lambda: cfg['audio'].__setitem__('tts_rate', rv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Mods folder")
     mfv = tk.StringVar(value=cfg['minecraft']['mods_folder'])
-    tk.Entry(sw, textvariable=mfv, font=f, bg="#333", fg="white", width=30).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
-    tk.Button(sw, text="Set", command=lambda: cfg['minecraft'].__setitem__('mods_folder', mfv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Entry(host, textvariable=mfv, font=f, bg="#333", fg="white", width=30).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
+    tk.Button(host, text="Set", command=lambda: cfg['minecraft'].__setitem__('mods_folder', mfv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Modpacks folder")
     mpfv = tk.StringVar(value=cfg['minecraft']['modpacks_folder'])
-    tk.Entry(sw, textvariable=mpfv, font=f, bg="#333", fg="white", width=30).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
-    tk.Button(sw, text="Set", command=lambda: cfg['minecraft'].__setitem__('modpacks_folder', mpfv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
+    tk.Entry(host, textvariable=mpfv, font=f, bg="#333", fg="white", width=30).grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
+    tk.Button(host, text="Set", command=lambda: cfg['minecraft'].__setitem__('modpacks_folder', mpfv.get()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     row[0] += 1
-    tk.Button(sw, text="SAVE & CLOSE", command=lambda: (save_config(cfg), sw.destroy()),
+    tk.Button(host, text="SAVE & CLOSE", command=lambda: (save_config(cfg), sw.destroy()),
               bg="#006600", fg="white", font=("Segoe UI", 11, "bold"), padx=20, pady=5
              ).grid(row=row[0], column=0, columnspan=3, pady=15)
 
