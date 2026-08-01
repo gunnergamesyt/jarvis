@@ -1,4 +1,5 @@
 SpeechRecognition
+pyaudio
 ollama
 edge-tts
 pygame

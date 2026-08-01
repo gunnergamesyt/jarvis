@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.3"
+VERSION = "1.5.4"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
         "font_family": "Consolas", "font_size": 10
     },
     "audio": {
-        "mic_index": 1, "tts_rate": 180,
+        "mic_index": -1, "tts_rate": 180,
         "tts_voice": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0"
     },
     "minecraft": {
@@ -970,10 +970,12 @@ def open_settings():
 
     lbl("Microphone")
     mics = get_mic_names()
-    mv = tk.StringVar(value=mics[cfg['audio']['mic_index']] if cfg['audio']['mic_index'] < len(mics) else mics[0])
-    mm = ttk.Combobox(sw, textvariable=mv, values=mics, font=f, state="readonly")
+    options = ["Default (auto)"] + mics
+    idx = cfg['audio']['mic_index']
+    mv = tk.StringVar(value="Default (auto)" if idx < 0 else (mics[idx] if idx < len(mics) else mics[0]))
+    mm = ttk.Combobox(sw, textvariable=mv, values=options, font=f, state="readonly")
     mm.grid(row=row[0]-1, column=1, padx=10, pady=4, sticky="ew")
-    mm.bind("<<ComboboxSelected>>", lambda e: cfg['audio'].__setitem__('mic_index', mics.index(mv.get())))
+    mm.bind("<<ComboboxSelected>>", lambda e: cfg['audio'].__setitem__('mic_index', options.index(mv.get()) - 1))
 
     lbl("TTS Rate")
     rv = tk.IntVar(value=cfg['audio']['tts_rate'])
