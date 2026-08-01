@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, colorchooser, font as tkfont
-import threading, queue, os, json, subprocess, difflib, webbrowser, shutil, re, requests, html, traceback, asyncio, uuid
+import threading, queue, os, json, subprocess, difflib, webbrowser, shutil, re, requests, html, traceback, asyncio, uuid, time
 from bs4 import BeautifulSoup
 import cloudscraper
 import speech_recognition as sr
@@ -8,15 +8,17 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.5"
+VERSION = "1.5.6"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
 def check_for_update():
     """Check GitHub for a newer version and auto-download if available"""
     try:
-        r = requests.get(UPDATE_URL, timeout=8)
+        # Cache-busting query param so the raw CDN never serves a stale copy
+        r = requests.get(UPDATE_URL + f"?cb={int(time.time())}", timeout=8)
         if r.status_code != 200:
+            add_log("sys", f"Update check failed (HTTP {r.status_code}).")
             return None
         content = r.text
         m = re.search(r'VERSION\s*=\s*"([\d.]+)"', content)
@@ -28,15 +30,38 @@ def check_for_update():
         if ver(remote) > ver(VERSION):
             path = os.path.abspath(__file__)
             backup = path + ".old"
-            if os.path.exists(backup):
-                os.remove(backup)
-            os.rename(path, backup)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
+            try:
+                if os.path.exists(backup):
+                    os.remove(backup)
+                os.rename(path, backup)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            except Exception as e:
+                add_log("sys", f"Update failed: cannot write {path} ({e}).")
+                if os.path.exists(backup) and not os.path.exists(path):
+                    os.rename(backup, path)
+                return None
+            # Fetch latest requirements too so dep updates (e.g. sounddevice) are detected
+            try:
+                rr = requests.get("https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/requirements.txt?cb=" + str(int(time.time())), timeout=8)
+                req_path = os.path.join(os.path.dirname(path), "requirements.txt")
+                if rr.status_code == 200:
+                    new_req = rr.text.replace("\r\n", "\n").strip()
+                    old_req = ""
+                    if os.path.exists(req_path):
+                        with open(req_path, encoding="utf-8") as f:
+                            old_req = f.read().replace("\r\n", "\n").strip()
+                    if new_req != old_req:
+                        with open(req_path, "w", encoding="utf-8") as f:
+                            f.write(rr.text)
+                        return remote + ":DEPS"
+            except Exception:
+                pass
             return remote
-    except:
-        pass
-    return None
+        return None
+    except Exception as e:
+        add_log("sys", f"Update check failed: {e}")
+        return None
 DEFAULT_CONFIG = {
     "window": {"width": 600, "height": 450},
     "theme": {
@@ -1103,16 +1128,33 @@ def toggle_tts():
     tts_on = not tts_on
     btn_tts.config(text=f"  TTS: {'ON' if tts_on else 'OFF'}  ", bg="#006600" if tts_on else "#444")
 
+def verify_deps():
+    missing = []
+    for mod in ("pyaudio", "sounddevice"):
+        try:
+            __import__(mod)
+        except Exception:
+            missing.append(mod)
+    if missing:
+        msg = "Microphone backend missing: " + ", ".join(missing) + ". Run INSTALL_JARVIS.bat to install dependencies."
+        add_log("sys", msg)
+
 def run_update_check():
     if UPDATE_URL.endswith("gunnergamesyt/jarvis/main/"):
         return
     add_log("sys", "Checking for updates...")
     new_ver = check_for_update()
-    if new_ver:
+    if new_ver and new_ver.endswith(":DEPS"):
+        new_ver = new_ver[:-5]
+        add_log("sys", f"Update v{new_ver} downloaded + new dependencies! Restart JARVIS, then run INSTALL_JARVIS.bat.")
+        speak(f"Update version {new_ver} downloaded, with new dependencies. Please restart me, and run the installer, sir.")
+    elif new_ver:
         add_log("sys", f"Update v{new_ver} downloaded! Please restart JARVIS.")
+        speak(f"Update version {new_ver} downloaded. Please restart me, sir.")
     else:
         add_log("sys", "JARVIS is up to date.")
 
 root.after(100, process)
 root.after(1500, run_update_check)
+root.after(3000, verify_deps)
 root.mainloop()
