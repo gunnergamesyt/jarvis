@@ -8,7 +8,7 @@ import ollama
 import edge_tts
 import pygame
 
-VERSION = "1.5.4"
+VERSION = "1.5.5"
 UPDATE_URL = "https://raw.githubusercontent.com/gunnergamesyt/jarvis/main/JARVIS_Control.py"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_config.json")
 
@@ -823,10 +823,35 @@ def execute(q):
 
 # ── Listen ──
 def get_mic_names():
+    """Enumerate real input devices only (pyaudio -> sounddevice -> fallback)"""
+    names = []
     try:
-        return sr.Microphone.list_microphone_names()
-    except:
-        return ["Default"]
+        import pyaudio
+        p = pyaudio.PyAudio()
+        for i in range(p.get_device_count()):
+            info = p.get_device_info_by_index(i)
+            if info.get('maxInputChannels', 0) > 0:
+                names.append(info.get('name') or f"Mic {i}")
+        p.terminate()
+    except Exception:
+        pass
+    if not names:
+        try:
+            names = sr.Microphone.list_microphone_names()
+        except Exception:
+            pass
+    if not names:
+        try:
+            import sounddevice as sd
+            for i, d in enumerate(sd.query_devices()):
+                if d.get('max_input_channels', 0) > 0:
+                    names.append(d['name'])
+        except Exception:
+            pass
+    if not names:
+        add_log("sys", "No microphone backend found. Run: pip install pyaudio sounddevice")
+        return ["Default (auto)"]
+    return names
 
 def listen():
     r = sr.Recognizer()
@@ -969,7 +994,7 @@ def open_settings():
     tk.Button(sw, text="Apply", command=lambda: (cfg['window'].__setitem__('height', hv.get()), apply_theme()), bg="#3a3a3a", fg="white", font=f).grid(row=row[0]-1, column=2, padx=5)
 
     lbl("Microphone")
-    mics = get_mic_names()
+    mics = [m for m in get_mic_names() if m != "Default (auto)"]
     options = ["Default (auto)"] + mics
     idx = cfg['audio']['mic_index']
     mv = tk.StringVar(value="Default (auto)" if idx < 0 else (mics[idx] if idx < len(mics) else mics[0]))
