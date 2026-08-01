@@ -317,6 +317,13 @@ def ensure_default_animation():
             os.makedirs(ANIM_DIR, exist_ok=True)
         mp4 = os.path.join(ANIM_DIR, "default.mp4")
         if os.path.exists(mp4):
+            # Make sure the paired audio exists too (git ignores *.mp3)
+            try:
+                mp3 = os.path.join(ANIM_DIR, "default.mp3")
+                if not os.path.exists(mp3):
+                    asyncio.run(edge_tts.Communicate("Systems online, sir.", "en-GB-RyanNeural").save(mp3))
+            except Exception:
+                pass
             return mp4
         import cv2
         import numpy as np
